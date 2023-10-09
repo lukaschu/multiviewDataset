@@ -2,15 +2,24 @@ import sys
 sys.path.append("..")
 sys.path.append(".")
 
-from toolkits.manolayer import MANO_SMPL
-from toolkits.globalCamera.util import visualize_better_qulity_depth_map
-from toolkits.globalCamera.camera import CameraIntrinsics,perspective_projection,perspective_back_projection
-from toolkits.globalCamera.constant import Constant
-import os,pickle
+from manolayer import MANO_SMPL
+from globalCamera.util import visualize_better_qulity_depth_map
+from globalCamera.camera import CameraIntrinsics,perspective_projection,perspective_back_projection
+from globalCamera.constant import Constant
+import io,os,pickle
 
 import numpy as np
 import torch
 import cv2
+
+# Helping class (needed for pickle.load)
+class CPU_Unpickler(pickle.Unpickler):
+    def find_class(self, module, name):
+        if module == 'torch.storage' and name == '_load_from_bytes':
+            return lambda b: torch.load(io.BytesIO(b), map_location='cpu')
+        else:
+            pass
+        return super().find_class(module, name)
 
 def AxisRotMat(angles,rotation_axis):
     x,y,z=rotation_axis
@@ -86,10 +95,8 @@ class MultiviewDatasetDemo():
 
         if(loadManoParam):
             with open(os.path.join(self.baseDir,self.date+'manoParam.pkl'), 'rb') as f:
-                self.manoparam = pickle.load(f)
-
-
-
+                #self.manoparam = torch.load(f, map_location=torch.device('cpu'))
+                self.manoparam = CPU_Unpickler(f).load()
 
 
     def getCameraIntrinsic(self,iv):
@@ -272,24 +279,26 @@ class MultiviewDatasetDemo():
 
 
 if __name__ == "__main__":
-    file_path1 = "/media/csc/Seagate Backup Plus Drive/dataset/7-14-1-2"
-    file_path2 = "/media/csc/Seagate Backup Plus Drive/dataset/9-10-1-2"
-    file_path3 = "/media/csc/Seagate Backup Plus Drive/dataset/9-17-1-2"
-    file_path4 = '/media/csc/Seagate Backup Plus Drive/dataset/9-25-1-2'
+    # I put in the manual paths b.c ../ didn't work. Need to be changed!
+    file_path1 = "/Users/lukasschuepp/framework/hand_data/data/7-14-1-2"
+    file_path2 = "/Users/lukasschuepp/framework/hand_data/data/9-10-1-2"
+    file_path3 = "/Users/lukasschuepp/framework/hand_data/data/9-17-1-2"
+    file_path4 = '/Users/lukasschuepp/framework/hand_data/data/9-25-1-2'
     file_paths = [file_path1,file_path2, file_path3, file_path4]
-    manoPath = '/home/csc/MANO-hand-model-toolkit/mano/models/MANO_RIGHT.pkl'
-    for path in file_paths:
-        demo=MultiviewDatasetDemo(loadManoParam=True,file_path=path,manoPath=manoPath)
-        for i in range(0,20):
-            # meshcolor=demo.drawMesh(i)
-            # cv2.imshow("meshcolor", meshcolor)
-            # imgs=demo.drawPose4view(i)
-            # cv2.imshow("imgs", imgs)
-            # depth = demo.getBetterDepth(i)
-            # cv2.imshow("depth", depth)
-            depth = demo.getMask(i)
-            cv2.imshow("depth", depth)
-            cv2.waitKey(1)
+    manoPath = "/Users/lukasschuepp/framework/hand_data/multiviewDataset/MANO_RIGHT.pkl"
+    #for path in file_paths:
+    path = file_path1
+    demo=MultiviewDatasetDemo(loadManoParam=True,file_path=path,manoPath=manoPath)
+    for i in range(0,20):
+        meshcolor=demo.drawMesh(i)
+        cv2.imshow("meshcolor", meshcolor)
+        #imgs=demo.drawPose4view(i)
+        #cv2.imshow("imgs", imgs)
+        #depth = demo.getBetterDepth(i)
+        #cv2.imshow("depth", depth)
+        #depth = demo.getMask(i)
+        #cv2.imshow("depth", depth)
+        cv2.waitKey(0)
 
 
 
