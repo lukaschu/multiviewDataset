@@ -7,6 +7,9 @@ from globalCamera.util import visualize_better_qulity_depth_map
 from globalCamera.camera import CameraIntrinsics,perspective_projection,perspective_back_projection
 from globalCamera.constant import Constant
 import io,os,pickle
+import pyrender
+import trimesh
+import open3d as o3d
 
 import numpy as np
 import torch
@@ -57,6 +60,7 @@ class MultiviewDatasetDemo():
         self.date = baseDir[baseDir.rfind('/') + 1:]
         calib_path = os.path.join(baseDir, 'calib.pkl')
         print("baseDir", baseDir)
+        print("currentDir", os. getcwd())
         with open(calib_path, 'rb') as f:
             camera_pose_map = pickle.load(f)
 
@@ -168,6 +172,7 @@ class MultiviewDatasetDemo():
         if (uselist): return dlist
         return np.hstack(dlist)
 
+    # transform manoParams to mano vertices
     def getManoVertex(self,idx):
         results,scale, joint_root = self.getManoParamFromDisk(idx)
         vertex, joint_pre = \
@@ -184,6 +189,7 @@ class MultiviewDatasetDemo():
         self.vertices=vertices
         return vertices
 
+    # retrieve manoParams
     def getManoParamFromDisk(self,idx):
         #return a dictionary which includes mano pose parameters, scale, and transition
         assert (self.loadManoParam==True)
@@ -193,10 +199,9 @@ class MultiviewDatasetDemo():
         joint_root=torch.tensor(self.joints[idx,5,:3,0]/1000,dtype=torch.float32)
         return results,scale, joint_root
 
-
-
+    # transfrom 3D hand mesh vertices into 4 views
     def get4viewManovertices(self,idx):
-        vertices=self.getManoVertex(idx)
+        vertices=self.getManoVertex(idx) # shape (778,4,1)
         vertices4view=np.zeros([4,778,4,1])
         for iv in range(4):
             inv = np.linalg.inv(self.camera_pose[iv])
@@ -204,6 +209,7 @@ class MultiviewDatasetDemo():
         self.vertices4view=vertices4view
         return vertices4view
 
+    # render the 4 views
     def render4mesh(self,idx,ratio=1):
         #the ratio=10 can make the rendered image be black
         vertices4view=self.get4viewManovertices(idx)
@@ -237,7 +243,7 @@ class MultiviewDatasetDemo():
         meshcolor = np.hstack(recolorlist)
         return meshcolor
 
-
+    # overlay rendered meshes with real images, idx is the frame number
     def drawMesh(self,idx):
         recolor=self.render4mesh(idx)
         color=np.hstack(self.getImgsList(idx))
@@ -274,36 +280,112 @@ class MultiviewDatasetDemo():
         if(view==1):imgs = imgs[0].copy()
         else:imgs = np.hstack(imgs)
         return imgs
+    
+
+    def renderSingleMesh(self, idx, ratio=1):
+        vertices = self.getManoVertex(idx)
+
+        # Create a trimesh
+        cv = vertices[:, :3, 0].copy() / 1000 * ratio
+        tmesh = trimesh.Trimesh(vertices=cv, faces=self.mano_right.faces)
+
+        # Create an Open3D TriangleMesh
+        mesh_o3d = o3d.geometry.TriangleMesh()
+        mesh_o3d.vertices = o3d.utility.Vector3dVector(cv)
+        mesh_o3d.triangles = o3d.utility.Vector3iVector(self.mano_right.faces)
+
+        # Compute the normals for the Open3D TriangleMesh
+        mesh_o3d.compute_vertex_normals()
+
+        # Create point cloud with n points sampled from the mesh
+        pcd = mesh_o3d.sample_points_uniformly(number_of_points=5000)
+
+        # Create an Open3D visualizer
+        vis = o3d.visualization.Visualizer()
+        vis.create_window()
+
+        # Add the TriangleMesh to the visualizer
+        vis.add_geometry(pcd)
+
+        # Start the visualization
+        vis.run()
+
+        # Close the visualizer when done
+        vis.destroy_window()
 
 
+    def renderPartialMesh(self, idx, ratio=1):
+        vertices = self.getManoVertex(idx)
+
+        # Create a trimesh
+        cv = vertices[:, :3, 0].copy() / 1000 * ratio
+
+        # Create an Open3D TriangleMesh
+        mesh_o3d = o3d.geometry.TriangleMesh()
+        mesh_o3d.vertices = o3d.utility.Vector3dVector(cv)
+        mesh_o3d.triangles = o3d.utility.Vector3iVector(self.mano_right.faces)
+
+        # Compute the normals for the Open3D TriangleMesh
+        mesh_o3d.compute_vertex_normals()
+
+        # Create point cloud with n points sampled from the mesh
+        pcd = mesh_o3d.sample_points_uniformly(number_of_points=200000)
+
+        # Define parameters used for hidden_point_removal"
+        diameter = np.linalg.norm(np.asarray(pcd.get_max_bound()) - np.asarray(pcd.get_min_bound()))
+        camera = [0.5, 0, 0.6]
+        radius = diameter * 10000
+
+        # Get all points that are visible from the given view point
+        _, pt_map = pcd.hidden_point_removal(camera, radius)
+        pcd_pt = pcd.select_by_index(pt_map)
+
+        # Create a larger visual representation for the camera point
+        camera_mesh = o3d.geometry.TriangleMesh.create_sphere(radius=0.005)  # Adjust the radius as needed
+        camera_mesh.translate(camera)  # Set the position of the camera mesh
+        # camera_pcd = o3d.geometry.PointCloud()
+        # camera_pcd.points = o3d.utility.Vector3dVector([camera])
+
+        opt = o3d.visualization.Visualizer()
+        opt.create_window()
+
+        # add pcd and with grey color
+        pcd.paint_uniform_color([0.5, 0.5, 0.5])
+        opt.add_geometry(pcd)
+
+        opt.add_geometry(pcd_pt) # Add the partial point cloud
+        opt.add_geometry(camera_mesh)  # Add the custom camera mesh
+
+        # opt.add_geometry(camera_pcd)
+        opt.add_geometry(o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0]))
+        # render = opt.get_render_option()
+        # render.show_coordinate_frame = True
+
+        opt.run()
+        opt.destroy_window()
 
 
 if __name__ == "__main__":
     # I put in the manual paths b.c ../ didn't work. Need to be changed!
-    file_path1 = "/Users/lukasschuepp/framework/hand_data/data/7-14-1-2"
-    file_path2 = "/Users/lukasschuepp/framework/hand_data/data/9-10-1-2"
-    file_path3 = "/Users/lukasschuepp/framework/hand_data/data/9-17-1-2"
-    file_path4 = '/Users/lukasschuepp/framework/hand_data/data/9-25-1-2'
+    file_path1 = "/Users/simonschlapfer/Documents/ETH/Master/Mixed Reality/data/7-14-1-2"
+    file_path2 = "/Users/simonschlapfer/Documents/ETH/Master/Mixed Reality/data/9-10-1-2"
+    file_path3 = "/Users/simonschlapfer/Documents/ETH/Master/Mixed Reality/data/9-17-1-2"
+    file_path4 = '/Users/simonschlapfer/Documents/ETH/Master/Mixed Reality/data/9-25-1-2'
     file_paths = [file_path1,file_path2, file_path3, file_path4]
-    manoPath = "/Users/lukasschuepp/framework/hand_data/multiviewDataset/MANO_RIGHT.pkl"
+    manoPath = "/Users/simonschlapfer/Documents/ETH/Master/Mixed Reality/multiviewDataset/MANO_RIGHT.pkl"
     #for path in file_paths:
-    path = file_path1
+    path = file_path2
     demo=MultiviewDatasetDemo(loadManoParam=True,file_path=path,manoPath=manoPath)
-    for i in range(0,20):
-        meshcolor=demo.drawMesh(i)
-        cv2.imshow("meshcolor", meshcolor)
-        #imgs=demo.drawPose4view(i)
-        #cv2.imshow("imgs", imgs)
-        #depth = demo.getBetterDepth(i)
-        #cv2.imshow("depth", depth)
-        #depth = demo.getMask(i)
-        #cv2.imshow("depth", depth)
-        cv2.waitKey(0)
-
-
-
-
-
-
-
-
+    # demo.renderSingleMesh(0)
+    demo.renderPartialMesh(0)
+    # for i in range(0,3):
+    #     meshcolor=demo.drawMesh(i)
+    #     cv2.imshow("meshcolor", meshcolor)
+        # imgs=demo.drawPose4view(i)
+        # cv2.imshow("imgs", imgs)
+        # depth = demo.getBetterDepth(i)
+        # cv2.imshow("depth", depth)
+        # depth = demo.getMask(i)
+        # cv2.imshow("depth", depth)
+        # cv2.waitKey(0)       
+        
