@@ -14,10 +14,13 @@ class Full_Pointcloud_Maker(Depth_To_Pointcloud):
         # Object containing the single image point cloud extractor function
         estimator = Depth_To_Pointcloud(file_path)
 
-        # Contains all four point clouds of the same scene
+        # Contains all four point clouds of the same scene (3D or color)
         self.Four_Pointclouds = []
+        self.Four_Colorclouds = []
         for iv in range(4):
-            self.Four_Pointclouds.append(estimator.Generate_Pointcloud(idx,iv))
+            point_cloud, color_cloud = estimator.Generate_Pointcloud(idx,iv)
+            self.Four_Pointclouds.append(point_cloud)
+            self.Four_Colorclouds.append(color_cloud)
 
         # Extract the homogeneous Transf. w.r.t the fourth image coordinate system
         file_path = os.path.join(file_path, 'calib.pkl')
@@ -49,10 +52,15 @@ class Full_Pointcloud_Maker(Depth_To_Pointcloud):
     def Point_Cloud_completion(self):
         # Last point cloud is ref. frame
         Full_Point_Cloud = np.array(self.Four_Pointclouds[3])
+        Full_color_cloud = np.array(self.Four_Colorclouds[3])
         for iv in range(3):
             Partial_pointcloud = self.PointCloud_Transform(iv)
             Full_Point_Cloud = np.concatenate((Full_Point_Cloud, Partial_pointcloud), axis = 0)
-        return Full_Point_Cloud
+            Full_color_cloud = np.concatenate((Full_color_cloud, self.Four_Colorclouds[iv]), axis = 0)
+        
+        print(Full_color_cloud)
+        return Full_Point_Cloud, Full_color_cloud
+
     
     # Pointcloud smoothing /filtering
         
@@ -63,20 +71,22 @@ if __name__ == "__main__":
 
     # idx is frame
     idx = 0
+
     heyooo = Full_Pointcloud_Maker(file_path,idx)
-    Complete = heyooo.Point_Cloud_completion()
-    Complete /= 1000
+    Complete_cloud, Complete_color = heyooo.Point_Cloud_completion()
+    Complete_cloud /= 1000 # convert to meteres
     
     # Visualize
     pcd_o3d = o3d.geometry.PointCloud()  # create point cloud object
     
-    pcd_o3d.points = o3d.utility.Vector3dVector(Complete)  # set pcd_np as the point cloud points
-    
+    pcd_o3d.points = o3d.utility.Vector3dVector(Complete_cloud)  # set pcd_np as the point cloud points
+    pcd_o3d.colors =  o3d.utility.Vector3dVector(Complete_color) # Add the color 
+
     # Outlier removal with statistical approach
     #pcd_stat, ind_stat = pcd_o3d.remove_statistical_outlier(nb_neighbors=30, std_ratio=0.6)
 
     # Outliers removal with radial approach
-    #pcd_rad, ind_r = pcd_o3d.remove_statistical_outlier(nb_neighbors=30, std_ratio=0.6)
+    #pcd_rad, ind_r = pcd_o3d.remove_statistical_outlier(nb_neighbors=80, std_ratio=4)
 
     # Cropping the image
     #min_bound = [-math.inf, -math.inf, 0.3]
