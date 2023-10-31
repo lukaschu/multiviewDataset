@@ -298,8 +298,23 @@ class MultiviewDatasetDemo():
         mesh_o3d.compute_vertex_normals()
 
         # Create point cloud with n points sampled from the mesh
-        pcd = mesh_o3d.sample_points_uniformly(number_of_points=5000)
+        pcd = mesh_o3d.sample_points_uniformly(number_of_points=40000)
 
+        # Convert to numpy to normalize
+        Full_Point_Cloud = np.array(pcd.points)
+        
+        # Center the data around zero
+        centroid = np.mean(Full_Point_Cloud, axis=0)
+        Full_Point_Cloud = Full_Point_Cloud - centroid
+
+        self.pcd_mano = o3d.geometry.PointCloud()
+        self.pcd_mano.points = o3d.utility.Vector3dVector(Full_Point_Cloud)
+
+        #coord = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
+        #draw_geometries = [self.pcd_mano,coord]
+        #o3d.visualization.draw_geometries(draw_geometries)
+
+        """"
         # Create an Open3D visualizer
         vis = o3d.visualization.Visualizer()
         vis.create_window()
@@ -312,7 +327,7 @@ class MultiviewDatasetDemo():
 
         # Close the visualizer when done
         vis.destroy_window()
-
+        """
 
     def renderPartialMesh(self, idx, ratio=1):
         vertices = self.getManoVertex(idx)
@@ -367,17 +382,17 @@ class MultiviewDatasetDemo():
 
 if __name__ == "__main__":
     # I put in the manual paths b.c ../ didn't work. Need to be changed!
-    file_path1 = "/Users/simonschlapfer/Documents/ETH/Master/Mixed Reality/data/7-14-1-2"
-    file_path2 = "/Users/simonschlapfer/Documents/ETH/Master/Mixed Reality/data/9-10-1-2"
-    file_path3 = "/Users/simonschlapfer/Documents/ETH/Master/Mixed Reality/data/9-17-1-2"
-    file_path4 = '/Users/simonschlapfer/Documents/ETH/Master/Mixed Reality/data/9-25-1-2'
+    file_path1 = "/Users/lukasschuepp/framework/hand_data/data/7-14-1-2"
+    file_path2 = "/Users/lukasschuepp/framework/hand_data/data/9-10-1-2"
+    file_path3 = "/Users/lukasschuepp/framework/hand_data/data/9-17-1-2"
+    file_path4 = '/Users/lukasschuepp/framework/hand_data/data/9-25-1-2'
     file_paths = [file_path1,file_path2, file_path3, file_path4]
-    manoPath = "/Users/simonschlapfer/Documents/ETH/Master/Mixed Reality/multiviewDataset/MANO_RIGHT.pkl"
+    manoPath = "/Users/lukasschuepp/framework/hand_data/multiviewDataset/MANO_RIGHT.pkl"
     #for path in file_paths:
-    path = file_path2
+    path = file_path1
     demo=MultiviewDatasetDemo(loadManoParam=True,file_path=path,manoPath=manoPath)
-    # demo.renderSingleMesh(0)
-    demo.renderPartialMesh(0)
+    demo.renderSingleMesh(0)
+    # demo.renderPartialMesh(0)
     # for i in range(0,3):
     #     meshcolor=demo.drawMesh(i)
     #     cv2.imshow("meshcolor", meshcolor)
