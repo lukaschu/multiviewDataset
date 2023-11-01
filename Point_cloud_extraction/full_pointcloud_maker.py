@@ -78,8 +78,8 @@ class Full_Pointcloud_Maker(Depth_To_Pointcloud):
         #pcd_o3d.colors =  o3d.utility.Vector3dVector(Full_color_cloud) # Add the color
 
         # Cropping the image in a cube centered in the middle of the hand
-        min_bound = [-0.25, -0.25, -0.25]
-        max_bound = [0.25, 0.25, 0.25]
+        min_bound = [-0.20, -0.20, -0.20]
+        max_bound = [0.20, 0.20, 0.20]
         crop_box = o3d.geometry.AxisAlignedBoundingBox(min_bound, max_bound)
         pcd_o3d = pcd_o3d.crop(crop_box)
 
@@ -111,15 +111,15 @@ class Full_Pointcloud_Maker(Depth_To_Pointcloud):
     def center_normalize_crop_Partialcloud(self, cloud):
         # Center the data around zero
         #self.centroid = np.mean(Partial_cloud, axis=0)
-        Complete = Partial_cloud - self.centroid
+        Complete = cloud - self.centroid
 
         # We convert to numpy array to o3d.pointcloud
         pcd_o3d = o3d.geometry.PointCloud()
         pcd_o3d.points = o3d.utility.Vector3dVector(Complete)  # set pcd_np as the point cloud points
 
         # Cropping the image in a cube centered in the middle of the hand
-        min_bound = [-0.25, -0.25, -0.25]
-        max_bound = [0.25, 0.25, 0.25]
+        min_bound = [-0.20, -0.20, -0.20]
+        max_bound = [0.20, 0.20, 0.20]
         crop_box = o3d.geometry.AxisAlignedBoundingBox(min_bound, max_bound)
         pcd_o3d = pcd_o3d.crop(crop_box)
 
@@ -134,31 +134,65 @@ if __name__ == "__main__":
     file_path = "/Users/lukasschuepp/framework/hand_data/data/7-14-1-2"
     manoPath = "/Users/lukasschuepp/framework/hand_data/multiviewDataset/MANO_RIGHT.pkl"
 
+    data_folder = "Hand_Data_1"
+    train_folder = os.path.join(data_folder, "Train")
+    complete_folder = os.path.join(train_folder, "Complete")
+    partial_folder = os.path.join(train_folder, "Partial")
+    #id_train_folder = os.path.join(train_folder, "ID_Train")
+
+    # Make sure the directories exist
+    os.makedirs(complete_folder, exist_ok=True)
+    os.makedirs(partial_folder, exist_ok=True)
+    #os.makedirs(id_train_folder, exist_ok=True)
+
     # idx is frame
     idx = 0
-    # True depth data full cloud
-    cloud_maker = Full_Pointcloud_Maker(file_path,idx)
-    Complete_cloud = cloud_maker.Point_Cloud_completion()
-    Complete_cloud.paint_uniform_color([1, 0, 0]) # only for plotting 
+    # Train upto 3500
+    amount_of_data = 10
+    for idx in range (amount_of_data):
 
-    # True depth data partial cloud 
-    iv = 2
-    Partial_cloud = cloud_maker.PointCloud_Transform(iv)
-    Partial_cloud /= 1000
-    Partial_cloud = cloud_maker.center_normalize_crop_Partialcloud(Partial_cloud)
-    Partial_cloud.paint_uniform_color([0,0,1])
+        # Complete pointcloud
+        cloud_maker = Full_Pointcloud_Maker(file_path,idx)
+        Complete_cloud = cloud_maker.Point_Cloud_completion() # return pointcloud
 
-    # mano data full cloud
-    Mano_Maker = MultiviewDatasetDemo(loadManoParam=True,file_path=file_path,manoPath=manoPath)
-    Mano_Maker.renderSingleMesh(idx)
-    Complete_cloud_mano = Mano_Maker.pcd_mano
-    Complete_cloud_mano = cloud_maker.Normalize(Complete_cloud_mano)
-    Complete_cloud_mano.paint_uniform_color([0, 1, 0]) # only for plotting
-    
-    # Plotting with coord system
-    coord = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
-    draw_geometries = [Complete_cloud,Partial_cloud,coord]
-    o3d.visualization.draw_geometries(draw_geometries)
+        # Define name and create directory for partial clouds 
+        id_name = "%05d" % (idx)
+        os.makedirs(os.path.join(partial_folder, id_name), exist_ok=True)
+
+        # mano data full cloud
+        Mano_Maker = MultiviewDatasetDemo(loadManoParam=True,file_path=file_path,manoPath=manoPath)
+        Mano_Maker.renderSingleMesh(idx)
+        Complete_cloud_mano = Mano_Maker.pcd_mano #return pointcloud
+        Complete_cloud_mano = np.array(Complete_cloud_mano.points)
+        Complete_cloud_mano = cloud_maker.center_normalize_crop_Partialcloud(Complete_cloud_mano)
+
+        # Save the files
+        filename_mano = os.path.join(complete_folder, id_name + ".pcd")
+
+        # Save the point cloud to the PCD file
+        o3d.io.write_point_cloud(filename_mano, Complete_cloud_mano, write_ascii=True)
+
+        for iv in range(4):
+            # True depth data full cloud
+            #Complete_cloud.paint_uniform_color([1, 0, 0]) # only for plotting 
+
+            # True depth data partial cloud 
+            Partial_cloud = cloud_maker.PointCloud_Transform(iv) #return numpy array
+            Partial_cloud /= 1000
+            np.random.shuffle(Partial_cloud)
+            Partial_cloud = Partial_cloud[0:2048]
+            Partial_cloud = cloud_maker.center_normalize_crop_Partialcloud(Partial_cloud)
+
+            # Save the files
+            filename_sub_partial = os.path.join(partial_folder, id_name, str(iv) + ".pcd")
+
+            # Save the point cloud to the PCD file
+            o3d.io.write_point_cloud(filename_sub_partial, Partial_cloud, write_ascii=True)
+
+            # Plotting with coord system
+            #coord = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
+            #draw_geometries = [Complete_cloud_mano,Partial_cloud,coord]
+            #o3d.visualization.draw_geometries(draw_geometries)
 
 
 """"

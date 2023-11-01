@@ -298,14 +298,10 @@ class MultiviewDatasetDemo():
         mesh_o3d.compute_vertex_normals()
 
         # Create point cloud with n points sampled from the mesh
-        pcd = mesh_o3d.sample_points_uniformly(number_of_points=40000)
+        pcd = mesh_o3d.sample_points_uniformly(number_of_points=16384)
 
         # Convert to numpy to normalize
         Full_Point_Cloud = np.array(pcd.points)
-        
-        # Center the data around zero
-        centroid = np.mean(Full_Point_Cloud, axis=0)
-        Full_Point_Cloud = Full_Point_Cloud - centroid
 
         self.pcd_mano = o3d.geometry.PointCloud()
         self.pcd_mano.points = o3d.utility.Vector3dVector(Full_Point_Cloud)
