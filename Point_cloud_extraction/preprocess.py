@@ -71,7 +71,7 @@ split_info = [{
     "test": test_files
 }]
 
-json_file_path = os.path.join(destination_folder, 'split_info.json')
+json_file_path = os.path.join(destination_folder, 'PCN.json')
 
 with open(json_file_path, 'w') as json_file:
     json.dump(split_info, json_file)
