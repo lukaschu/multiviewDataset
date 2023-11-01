@@ -5,6 +5,7 @@ import numpy as np
 import io,os
 import open3d as o3d
 import pickle
+import tqdm
 
 # We need toolkits for the mano data (stems from original codebase)
 path = os.path.abspath("toolkits")
@@ -134,10 +135,9 @@ if __name__ == "__main__":
     file_path = "/Users/lukasschuepp/framework/hand_data/data/7-14-1-2"
     manoPath = "/Users/lukasschuepp/framework/hand_data/multiviewDataset/MANO_RIGHT.pkl"
 
-    data_folder = "Hand_Data_1"
-    train_folder = os.path.join(data_folder, "Train")
-    complete_folder = os.path.join(train_folder, "Complete")
-    partial_folder = os.path.join(train_folder, "Partial")
+    data_folder = "Hand_Data_15"
+    complete_folder = os.path.join(data_folder, "Complete")
+    partial_folder = os.path.join(data_folder, "Partial")
     #id_train_folder = os.path.join(train_folder, "ID_Train")
 
     # Make sure the directories exist
@@ -148,8 +148,8 @@ if __name__ == "__main__":
     # idx is frame
     idx = 0
     # Train upto 3500
-    amount_of_data = 10
-    for idx in range (amount_of_data):
+    amount_of_data = 15
+    for idx in tqdm(range(amount_of_data)):
 
         # Complete pointcloud
         cloud_maker = Full_Pointcloud_Maker(file_path,idx)
