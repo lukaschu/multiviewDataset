@@ -97,6 +97,18 @@ if os.path.exists(os.path.join(root_directory, "Hand_Data_9-25-1-2")):
         item_path = os.path.join(src_dir, item)
         shutil.move(item_path, os.path.join(dest_dir, item))
 
+# List of folder names to rename
+folders_to_rename = ['Complete', 'Partial']
+
+# Iterate through the train, test, and valid folders
+for split_folder in ['train', 'test', 'valid']:
+    for folder_name in folders_to_rename:
+        old_folder_path = os.path.join(destination_folder, split_folder, folder_name)
+        new_folder_path = os.path.join(destination_folder, split_folder, folder_name.lower())
+        
+        # Rename the folder to lowercase
+        os.rename(old_folder_path, new_folder_path)
+
 train_files = os.listdir(os.path.join(train_folder, 'complete', category_id))
 valid_files = os.listdir(os.path.join(valid_folder, 'complete', category_id))
 test_files = os.listdir(os.path.join(test_folder, 'complete', category_id))
