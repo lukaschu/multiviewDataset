@@ -6,6 +6,7 @@ import io,os
 import open3d as o3d
 import pickle
 import tqdm
+from tqdm import tqdm
 
 # We need toolkits for the mano data (stems from original codebase)
 path = os.path.abspath("toolkits")
@@ -69,9 +70,9 @@ class Full_Pointcloud_Maker(Depth_To_Pointcloud):
         # Convert pointcloud to meters
         Full_Point_Cloud /= 1000
 
-        # Center the data around zero
-        self.centroid = np.mean(Full_Point_Cloud, axis=0)
-        Full_Point_Cloud = Full_Point_Cloud - self.centroid
+        # Center the data around zero (for full cloud, not relevant for data)
+        centroid = np.mean(Full_Point_Cloud, axis=0)
+        Full_Point_Cloud = Full_Point_Cloud - centroid
         
         # We convert to numpy array to o3d.pointcloud
         pcd_o3d = o3d.geometry.PointCloud()
@@ -86,21 +87,19 @@ class Full_Pointcloud_Maker(Depth_To_Pointcloud):
 
         # Now we normalize the data
         pcd_array = np.array(pcd_o3d.points)
-        self.scaler = np.max(np.sqrt(np.sum(pcd_array**2, axis=1)))
-        pcd_array = pcd_array / self.scaler
+        scale = np.max(np.sqrt(np.sum(pcd_array**2, axis=1)))
+        pcd_array = pcd_array / scale
 
         pcd_o3d.points = o3d.utility.Vector3dVector(pcd_array)
         
         return pcd_o3d
     
     # Normalize
-    def Normalize(self, PointCloud):
+    def Normalize(self, PointCloud, scaler):
         # We need to scale the true depth and the mano pointclouds with the same scaler
-        scaler = self.scaler
 
         # Convert data to numpy (easier to work with)
-        pcd_array = np.array(PointCloud.points)
-        pcd_array = pcd_array / scaler
+        pcd_array = PointCloud / scaler
 
         # Now we convert it back
         pcd_o3d = o3d.geometry.PointCloud()
@@ -109,10 +108,10 @@ class Full_Pointcloud_Maker(Depth_To_Pointcloud):
         return pcd_o3d
     
     # Function specifically for cropping, cnetering and normlaizing the partial pointcloud !
-    def center_normalize_crop_Partialcloud(self, cloud):
+    def center_crop_Partialcloud(self, cloud, center):
         # Center the data around zero
         #self.centroid = np.mean(Partial_cloud, axis=0)
-        Complete = cloud - self.centroid
+        Complete = cloud - center
 
         # We convert to numpy array to o3d.pointcloud
         pcd_o3d = o3d.geometry.PointCloud()
@@ -124,33 +123,25 @@ class Full_Pointcloud_Maker(Depth_To_Pointcloud):
         crop_box = o3d.geometry.AxisAlignedBoundingBox(min_bound, max_bound)
         pcd_o3d = pcd_o3d.crop(crop_box)
 
-        # normalize data
-        pcd_o3d = self.Normalize(pcd_o3d)
-
-        return(pcd_o3d)
+        return(np.array(pcd_o3d.points))
 
 
 if __name__ == "__main__":
     print("Starting extraction process")
-    file_path = "/Users/lukasschuepp/framework/hand_data/data/7-14-1-2"
+    file_path = "/Users/lukasschuepp/framework/hand_data/data/9-25-1-2"
     manoPath = "/Users/lukasschuepp/framework/hand_data/multiviewDataset/MANO_RIGHT.pkl"
 
-    data_folder = "Hand_Data_15"
+    data_folder = "Hand_Data_9-25-1-2"
     complete_folder = os.path.join(data_folder, "Complete")
     partial_folder = os.path.join(data_folder, "Partial")
-    #id_train_folder = os.path.join(train_folder, "ID_Train")
 
     # Make sure the directories exist
     os.makedirs(complete_folder, exist_ok=True)
     os.makedirs(partial_folder, exist_ok=True)
-    #os.makedirs(id_train_folder, exist_ok=True)
 
-    # idx is frame
-    idx = 0
-    # Train upto 3500
-    amount_of_data = 15
-    for idx in tqdm(range(amount_of_data)):
 
+    amount_of_data = 5300
+    for idx in tqdm(range(amount_of_data), desc = "loading"):
         # Complete pointcloud
         cloud_maker = Full_Pointcloud_Maker(file_path,idx)
         Complete_cloud = cloud_maker.Point_Cloud_completion() # return pointcloud
@@ -164,7 +155,14 @@ if __name__ == "__main__":
         Mano_Maker.renderSingleMesh(idx)
         Complete_cloud_mano = Mano_Maker.pcd_mano #return pointcloud
         Complete_cloud_mano = np.array(Complete_cloud_mano.points)
-        Complete_cloud_mano = cloud_maker.center_normalize_crop_Partialcloud(Complete_cloud_mano)
+        np.random.shuffle(Complete_cloud_mano)
+        Complete_cloud_mano = Complete_cloud_mano[0:16384,:]
+        # Define the center using mano data
+        center = np.mean(Complete_cloud_mano, axis=0)
+        Complete_cloud_mano = cloud_maker.center_crop_Partialcloud(Complete_cloud_mano, center)
+        # Define the scale value of the mano hand
+        scaler = np.max(np.sqrt(np.sum(Complete_cloud_mano**2, axis=1)))
+        Complete_cloud_mano = cloud_maker.Normalize(Complete_cloud_mano, scaler)
 
         # Save the files
         filename_mano = os.path.join(complete_folder, id_name + ".pcd")
@@ -173,15 +171,14 @@ if __name__ == "__main__":
         o3d.io.write_point_cloud(filename_mano, Complete_cloud_mano, write_ascii=True)
 
         for iv in range(4):
-            # True depth data full cloud
-            #Complete_cloud.paint_uniform_color([1, 0, 0]) # only for plotting 
 
             # True depth data partial cloud 
             Partial_cloud = cloud_maker.PointCloud_Transform(iv) #return numpy array
             Partial_cloud /= 1000
             np.random.shuffle(Partial_cloud)
             Partial_cloud = Partial_cloud[0:2048]
-            Partial_cloud = cloud_maker.center_normalize_crop_Partialcloud(Partial_cloud)
+            Partial_cloud = cloud_maker.center_crop_Partialcloud(Partial_cloud, center)
+            Partial_cloud = cloud_maker.Normalize(Partial_cloud, scaler)
 
             # Save the files
             filename_sub_partial = os.path.join(partial_folder, id_name, str(iv) + ".pcd")
@@ -189,9 +186,13 @@ if __name__ == "__main__":
             # Save the point cloud to the PCD file
             o3d.io.write_point_cloud(filename_sub_partial, Partial_cloud, write_ascii=True)
 
+            # Add color for visualization
+            # Partial_cloud.paint_uniform_color([0,1,0])
+            # Complete_cloud_mano.paint_uniform_color([1,0,0])
+
             # Plotting with coord system
-            #coord = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
-            #draw_geometries = [Complete_cloud_mano,Partial_cloud,coord]
+            #coord = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1, origin=[0, 0, 0])
+            #draw_geometries = [Complete_cloud_mano, Partial_cloud, coord]
             #o3d.visualization.draw_geometries(draw_geometries)
 
 
